@@ -11,9 +11,8 @@ import TipSection from '@/components/TipSection';
 import AddItemModal from '@/components/AddItemModal';
 import { SplitSession, ReceiptItem, Person, SplitMode } from '@/types';
 import { getNextColor } from '@/lib/colors';
-import { saveSession, loadSession } from '@/lib/localStorage';
+import { saveSession, loadSession, saveCalculationResult } from '@/lib/localStorage';
 import { calculateSplit } from '@/lib/calculations';
-import { minimizeDebts } from '@/lib/debtMinimization';
 
 export default function HomePage() {
   const router = useRouter();
@@ -180,13 +179,9 @@ export default function HomePage() {
     // Calculate split
     const result = calculateSplit(session);
     
-    // Generate settlements
-    const settlements = minimizeDebts(result.personResults);
-    result.settlements = settlements;
-    
     // Save result and navigate
     saveSession(session);
-    localStorage.setItem('tallee-o-result', JSON.stringify(result));
+    saveCalculationResult(result);
     router.push('/results');
   };
 
