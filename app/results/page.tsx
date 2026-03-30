@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import TopBar from '@/components/TopBar';
 import ResultsTabs from '@/components/ResultsTabs';
 import SettlementSection from '@/components/SettlementSection';
-import SettleItWheel from '@/components/SettleItWheel';
 import { CalculationResult } from '@/types';
 import { loadCalculationResult } from '@/lib/localStorage';
 import { formatCents } from '@/lib/calculations';
@@ -13,7 +12,6 @@ import { formatCents } from '@/lib/calculations';
 export default function ResultsPage() {
   const router = useRouter();
   const [result, setResult] = useState<CalculationResult | null>(null);
-  const [isWheelOpen, setIsWheelOpen] = useState(false);
 
   useEffect(() => {
     const savedResult = loadCalculationResult();
@@ -53,7 +51,11 @@ export default function ResultsPage() {
         <ResultsTabs result={result} />
         
         {/* Settlement Section */}
-        <SettlementSection settlements={result.settlements} />
+        <SettlementSection 
+          settlements={result.settlements} 
+          payerId={result.payerId}
+          personResults={result.personResults}
+        />
         
         {/* Totals Summary */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
@@ -90,27 +92,8 @@ export default function ResultsPage() {
           </div>
         </div>
         
-        {/* Settle-It Wheel Button */}
-        <div className="pt-4">
-          <button
-            onClick={() => setIsWheelOpen(true)}
-            className="w-full py-4 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 flex items-center justify-center space-x-3"
-          >
-            <span className="text-2xl">🎡</span>
-            <span>Spin the Settle-It Wheel</span>
-          </button>
-        </div>
+        {/* Note: Settle-It Wheel has been moved to the PayerSelectionModal */}
       </main>
-
-      <SettleItWheel
-        isOpen={isWheelOpen}
-        onClose={() => setIsWheelOpen(false)}
-        people={result.personResults.map(p => ({
-          id: p.personId,
-          name: p.name,
-          color: p.color,
-        }))}
-      />
     </>
   );
 }

@@ -89,7 +89,7 @@ export default function PersonDetailPage() {
               {personResult.itemBreakdown.map(item => (
                 <div
                   key={item.itemId}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-750 rounded-lg"
+                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#374151] rounded-lg"
                 >
                   <span className="text-gray-900 dark:text-white">
                     {item.name}

@@ -16,7 +16,38 @@ export function parseDollarsToCents(value: string): number {
   return Math.round(dollars * 100);
 }
 
-// Helper for largest remainder rounding
+// Helper for round-robin remainder distribution with offset
+function distributeWithRoundRobin(
+  totalCents: number,
+  n: number,
+  startIndex: number
+): { shares: number[], nextStartIndex: number } {
+  if (n === 0) {
+    return { shares: [], nextStartIndex: startIndex };
+  }
+  
+  const base = Math.floor(totalCents / n);
+  const remainder = totalCents % n;
+  
+  const shares = Array(n).fill(base);
+  
+  // Distribute remainder cents round-robin starting at startIndex
+  for (let i = 0; i < remainder; i++) {
+    const index = (startIndex + i) % n;
+    shares[index] += 1;
+  }
+  
+  const nextStartIndex = (startIndex + remainder) % n;
+  return { shares, nextStartIndex };
+}
+
+// Helper for round-robin remainder distribution (backward compatibility)
+function distributeRemainderRoundRobin(values: number[], total: number): number[] {
+  const { shares } = distributeWithRoundRobin(total, values.length, 0);
+  return shares;
+}
+
+// Helper for largest remainder rounding (kept for backward compatibility)
 function largestRemainderRounding(values: number[], total: number): number[] {
   const rounded = values.map(Math.floor);
   let remainder = total - rounded.reduce((sum, val) => sum + val, 0);
@@ -35,19 +66,20 @@ function largestRemainderRounding(values: number[], total: number): number[] {
   return rounded;
 }
 
-// Calculate item shares based on split mode
+// Calculate item shares based on split mode with round-robin offset
 function calculateItemShares(
   priceCents: number,
-  allocations: { personId: string; mode: SplitMode; value: number }[]
-): { personId: string; shareCents: number }[] {
+  allocations: { personId: string; mode: SplitMode; value: number }[],
+  roundRobinOffset: number
+): { personId: string; shareCents: number; nextOffset: number }[] {
   if (allocations.length === 0) return [];
   
   // If only one person, they get the full amount
   if (allocations.length === 1) {
-    return [{ personId: allocations[0].personId, shareCents: priceCents }];
+    return [{ personId: allocations[0].personId, shareCents: priceCents, nextOffset: roundRobinOffset }];
   }
   
-  const shares: { personId: string; shareCents: number }[] = [];
+  const shares: { personId: string; shareCents: number; nextOffset: number }[] = [];
   
   // Check if all allocations have the same mode
   const firstMode = allocations[0].mode;
@@ -55,25 +87,37 @@ function calculateItemShares(
   
   if (!allSameMode) {
     // Mixed modes not supported in this version
-    // Default to equal split
-    const share = Math.floor(priceCents / allocations.length);
-    let remainder = priceCents - (share * allocations.length);
+    // Default to equal split with round-robin
+    const { shares: shareAmounts, nextStartIndex } = distributeWithRoundRobin(
+      priceCents,
+      allocations.length,
+      roundRobinOffset
+    );
     
     for (let i = 0; i < allocations.length; i++) {
-      const shareCents = share + (i < remainder ? 1 : 0);
-      shares.push({ personId: allocations[i].personId, shareCents });
+      shares.push({ 
+        personId: allocations[i].personId, 
+        shareCents: shareAmounts[i],
+        nextOffset: nextStartIndex
+      });
     }
     return shares;
   }
   
   switch (firstMode) {
     case 'equal': {
-      const share = Math.floor(priceCents / allocations.length);
-      let remainder = priceCents - (share * allocations.length);
+      const { shares: shareAmounts, nextStartIndex } = distributeWithRoundRobin(
+        priceCents,
+        allocations.length,
+        roundRobinOffset
+      );
       
       for (let i = 0; i < allocations.length; i++) {
-        const shareCents = share + (i < remainder ? 1 : 0);
-        shares.push({ personId: allocations[i].personId, shareCents });
+        shares.push({ 
+          personId: allocations[i].personId, 
+          shareCents: shareAmounts[i],
+          nextOffset: nextStartIndex
+        });
       }
       break;
     }
@@ -82,7 +126,11 @@ function calculateItemShares(
       // Use exact values provided
       let total = 0;
       for (const alloc of allocations) {
-        shares.push({ personId: alloc.personId, shareCents: alloc.value });
+        shares.push({ 
+          personId: alloc.personId, 
+          shareCents: alloc.value,
+          nextOffset: roundRobinOffset // Offset doesn't change for exact splits
+        });
         total += alloc.value;
       }
       
@@ -102,13 +150,19 @@ function calculateItemShares(
       const totalPercent = percentages.reduce((sum, p) => sum + p, 0);
       
       if (totalPercent === 0) {
-        // If no percentages, split equally
-        const share = Math.floor(priceCents / allocations.length);
-        let remainder = priceCents - (share * allocations.length);
+        // If no percentages, split equally with round-robin
+        const { shares: shareAmounts, nextStartIndex } = distributeWithRoundRobin(
+          priceCents,
+          allocations.length,
+          roundRobinOffset
+        );
         
         for (let i = 0; i < allocations.length; i++) {
-          const shareCents = share + (i < remainder ? 1 : 0);
-          shares.push({ personId: allocations[i].personId, shareCents });
+          shares.push({ 
+            personId: allocations[i].personId, 
+            shareCents: shareAmounts[i],
+            nextOffset: nextStartIndex
+          });
         }
       } else {
         // Calculate exact shares using largest remainder
@@ -116,17 +170,54 @@ function calculateItemShares(
         const roundedShares = largestRemainderRounding(exactShares, priceCents);
         
         for (let i = 0; i < allocations.length; i++) {
-          shares.push({ personId: allocations[i].personId, shareCents: roundedShares[i] });
+          shares.push({ 
+            personId: allocations[i].personId, 
+            shareCents: roundedShares[i],
+            nextOffset: roundRobinOffset // Offset doesn't change for percentage splits
+          });
         }
       }
       break;
     }
   }
   
+  // Return the last nextOffset (all shares should have same nextOffset)
+  const finalNextOffset = shares.length > 0 ? shares[shares.length - 1].nextOffset : roundRobinOffset;
+  
+  // Return shares directly with the nextOffset included
   return shares;
 }
 
-export function calculateSplit(session: SplitSession): CalculationResult {
+// Generate settlements based on payer
+function generatePayerSettlements(
+  personResults: PersonResult[],
+  payerId: string
+): SettlementTransaction[] {
+  const payer = personResults.find(p => p.personId === payerId);
+  if (!payer) return [];
+  
+  const settlements: SettlementTransaction[] = [];
+  
+  for (const person of personResults) {
+    if (person.personId === payerId) continue; // Skip payer
+    
+    if (person.totalCents > 0) {
+      settlements.push({
+        fromPersonId: person.personId,
+        fromName: person.name,
+        fromColor: person.color,
+        toPersonId: payerId,
+        toName: payer.name,
+        toColor: payer.color,
+        amountCents: person.totalCents,
+      });
+    }
+  }
+  
+  return settlements;
+}
+
+export function calculateSplit(session: SplitSession, payerId?: string): CalculationResult {
   const { people, items, taxRatePercent, tipMode, tipValue, tipSplitMode, taxSplitMode } = session;
   
   // Step 1: Calculate item shares and build person subtotals
@@ -142,9 +233,19 @@ export function calculateSplit(session: SplitSession): CalculationResult {
     personItemBreakdown.set(person.id, []);
   }
   
-  // Process each item
+  // Process each item with running round-robin offset
+  let roundRobinOffset = 0;
+  
   for (const item of items) {
-    const shares = calculateItemShares(item.priceCents, item.allocations);
+    const sharesWithOffset = calculateItemShares(item.priceCents, item.allocations, roundRobinOffset);
+    
+    // Update offset for next item directly from the calculated shares
+    if (sharesWithOffset.length > 0) {
+      roundRobinOffset = sharesWithOffset[sharesWithOffset.length - 1].nextOffset;
+    }
+    
+    // Map to the shape expected by the rest of the function
+    const shares = sharesWithOffset.map(({ personId, shareCents }) => ({ personId, shareCents }));
     
     // Determine the dominant split mode for this item
     const splitMode = item.allocations.length > 0 ? item.allocations[0].mode : 'equal';
@@ -199,19 +300,24 @@ export function calculateSplit(session: SplitSession): CalculationResult {
   const personTaxes = new Map<string, number>();
   
   if (taxSplitMode === 'equal') {
-    // Divide tax equally among all people
-    const taxPerPerson = Math.floor(totalTaxCents / people.length);
-    let remainder = totalTaxCents - (taxPerPerson * people.length);
+    // Divide tax equally among all people with round-robin remainder using current offset
+    const { shares: taxShares, nextStartIndex } = distributeWithRoundRobin(
+      totalTaxCents,
+      people.length,
+      roundRobinOffset
+    );
     
     for (let i = 0; i < people.length; i++) {
-      const taxCents = taxPerPerson + (i < remainder ? 1 : 0);
-      personTaxes.set(people[i].id, taxCents);
+      personTaxes.set(people[i].id, taxShares[i]);
     }
+    
+    // Update offset for next distribution (tip)
+    roundRobinOffset = nextStartIndex;
   } else {
     // Proportional tax based on tax base
     const taxBases = people.map(person => personTaxBases.get(person.id) || 0);
     const exactTaxes = taxBases.map(base => (totalTaxCents * base) / totalTaxBase);
-    const roundedTaxes = largestRemainderRounding(exactTaxes, totalTaxCents);
+    const roundedTaxes = distributeRemainderRoundRobin(exactTaxes, totalTaxCents);
     
     for (let i = 0; i < people.length; i++) {
       personTaxes.set(people[i].id, roundedTaxes[i]);
@@ -232,19 +338,24 @@ export function calculateSplit(session: SplitSession): CalculationResult {
   const personTips = new Map<string, number>();
   
   if (tipSplitMode === 'equal') {
-    // Divide tip equally among all people
-    const tipPerPerson = Math.floor(totalTipCents / people.length);
-    let remainder = totalTipCents - (tipPerPerson * people.length);
+    // Divide tip equally among all people with round-robin remainder using current offset
+    const { shares: tipShares, nextStartIndex } = distributeWithRoundRobin(
+      totalTipCents,
+      people.length,
+      roundRobinOffset
+    );
     
     for (let i = 0; i < people.length; i++) {
-      const tipCents = tipPerPerson + (i < remainder ? 1 : 0);
-      personTips.set(people[i].id, tipCents);
+      personTips.set(people[i].id, tipShares[i]);
     }
+    
+    // Update offset (though not used further)
+    roundRobinOffset = nextStartIndex;
   } else {
     // Proportional tip based on subtotal
     const subtotals = people.map(person => personSubtotals.get(person.id) || 0);
     const exactTips = subtotals.map(subtotal => (totalTipCents * subtotal) / totalSubtotalCents);
-    const roundedTips = largestRemainderRounding(exactTips, totalTipCents);
+    const roundedTips = distributeRemainderRoundRobin(exactTips, totalTipCents);
     
     for (let i = 0; i < people.length; i++) {
       personTips.set(people[i].id, roundedTips[i]);
@@ -274,7 +385,12 @@ export function calculateSplit(session: SplitSession): CalculationResult {
   const grandTotalCents = totalSubtotalCents + totalTaxCents + totalTipCents;
   
   // Step 8: Generate settlements
-  const settlements = minimizeDebts(personResults);
+  let settlements: SettlementTransaction[] = [];
+  if (payerId) {
+    settlements = generatePayerSettlements(personResults, payerId);
+  } else {
+    settlements = minimizeDebts(personResults);
+  }
   
   return {
     personResults,
@@ -284,5 +400,6 @@ export function calculateSplit(session: SplitSession): CalculationResult {
     totalTaxCents,
     totalTipCents,
     grandTotalCents,
+    payerId,
   };
 }

@@ -12,7 +12,7 @@ interface AddItemModalProps {
   onDelete?: () => void;
   item?: ReceiptItem | null;
   people: Person[];
-  onAddPerson: () => void;
+  onAddPerson: (name: string) => void;
 }
 
 export default function AddItemModal({
@@ -102,15 +102,9 @@ export default function AddItemModal({
 
   const handleAddNewPerson = () => {
     if (newPersonName.trim()) {
-      onAddPerson();
-      // The new person will be added to the people list
-      // We'll select them by default
-      const newPerson = people[people.length - 1]; // Last person is the new one
-      if (newPerson) {
-        const newSelected = new Set(selectedPeople);
-        newSelected.add(newPerson.id);
-        setSelectedPeople(newSelected);
-      }
+      onAddPerson(newPersonName.trim());
+      // Note: The new person will be added to the people list by the parent
+      // We'll clear the input field and the parent will re-render with updated people
       setNewPersonName('');
     }
   };

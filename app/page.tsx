@@ -9,21 +9,22 @@ import PersonField from '@/components/PersonField';
 import ReceiptList from '@/components/ReceiptList';
 import TipSection from '@/components/TipSection';
 import AddItemModal from '@/components/AddItemModal';
+import PayerSelectionModal from '@/components/PayerSelectionModal';
 import { SplitSession, ReceiptItem, Person, SplitMode } from '@/types';
 import { getNextColor } from '@/lib/colors';
-import { saveSession, loadSession } from '@/lib/localStorage';
+import { saveSession, loadSession, saveCalculationResult } from '@/lib/localStorage';
 import { calculateSplit } from '@/lib/calculations';
-import { minimizeDebts } from '@/lib/debtMinimization';
 
 export default function HomePage() {
   const router = useRouter();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [isPayerModalOpen, setIsPayerModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ReceiptItem | null>(null);
   
-  // Initial session state
+  // Initial session state - empty to avoid hydration mismatch
   const [session, setSession] = useState<SplitSession>({
-    people: [{ id: uuidv4(), name: '', color: getNextColor([]) }],
+    people: [],
     items: [],
     taxRatePercent: 8,
     tipMode: 'percentage',
@@ -32,25 +33,48 @@ export default function HomePage() {
     taxSplitMode: 'proportional',
   });
 
-  // Load session from localStorage on mount
+  // Load session from localStorage on mount (client-side only)
   useEffect(() => {
     const savedSession = loadSession();
     if (savedSession) {
+      // Restore all session values from localStorage
       setSession(savedSession);
+    } else {
+      // Initialize with one empty person only on client side
+      setSession({
+        people: [{ id: uuidv4(), name: '', color: getNextColor([]) }],
+        items: [],
+        taxRatePercent: 8,
+        tipMode: 'percentage',
+        tipValue: 0,
+        tipSplitMode: 'equal',
+        taxSplitMode: 'proportional',
+      });
     }
   }, []);
 
-  // Save session to localStorage whenever it changes
+  // Auto-save session to localStorage whenever it changes
   useEffect(() => {
-    saveSession(session);
-  }, [session]);
+    // Only save if there's actual data (people or items)
+    if (session.people.length > 0 || session.items.length > 0) {
+      saveSession(session);
+    }
+  }, [
+    session.people,
+    session.items,
+    session.taxRatePercent,
+    session.tipMode,
+    session.tipValue,
+    session.tipSplitMode,
+    session.taxSplitMode,
+  ]);
 
   // People management
-  const addPerson = () => {
+  const addPerson = (name?: string) => {
     const usedColors = session.people.map(p => p.color);
     const newPerson: Person = {
       id: uuidv4(),
-      name: '',
+      name: name || '',
       color: getNextColor(usedColors),
     };
     setSession(prev => ({
@@ -177,17 +201,19 @@ export default function HomePage() {
       return;
     }
 
-    // Calculate split
-    const result = calculateSplit(session);
-    
-    // Generate settlements
-    const settlements = minimizeDebts(result.personResults);
-    result.settlements = settlements;
+    // Show payer selection modal
+    setIsPayerModalOpen(true);
+  };
+
+  const handlePayerConfirm = (payerId: string) => {
+    // Calculate split with payer
+    const result = calculateSplit(session, payerId);
     
     // Save result and navigate
     saveSession(session);
-    localStorage.setItem('tallee-o-result', JSON.stringify(result));
+    saveCalculationResult(result);
     router.push('/results');
+    setIsPayerModalOpen(false);
   };
 
   // Calculate subtotal for tip section
@@ -231,7 +257,7 @@ export default function HomePage() {
             }}
             className="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium rounded-lg transition-colors"
           >
-            Clear All
+            New Split (Reset All)
           </button>
         </div>
       </MobileDrawer>
@@ -244,6 +270,13 @@ export default function HomePage() {
         item={editingItem}
         people={session.people}
         onAddPerson={addPerson}
+      />
+
+      <PayerSelectionModal
+        isOpen={isPayerModalOpen}
+        onClose={() => setIsPayerModalOpen(false)}
+        onConfirm={handlePayerConfirm}
+        people={session.people}
       />
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-8">
@@ -274,7 +307,7 @@ export default function HomePage() {
               People
             </h2>
             <button
-              onClick={addPerson}
+              onClick={() => addPerson()}
               className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium rounded-lg transition-colors"
             >
               + Add Person
