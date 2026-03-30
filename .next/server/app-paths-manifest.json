@@ -1,6 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/results/page": "app/results/page.js",
-  "/results/person/[id]/page": "app/results/person/[id]/page.js",
-  "/results/item/[id]/page": "app/results/item/[id]/page.js"
-}
