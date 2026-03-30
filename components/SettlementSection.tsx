@@ -87,7 +87,7 @@ export default function SettlementSection({
             {settlements.map((transaction, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-750 rounded-lg"
+                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-[#374151] rounded-lg"
               >
                 <div className="flex items-center space-x-3">
                   <div className="flex items-center space-x-2">
@@ -174,7 +174,7 @@ export default function SettlementSection({
         {settlements.map((transaction, index) => (
           <div
             key={index}
-            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-750 rounded-lg"
+            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-[#374151] rounded-lg"
           >
             <div className="flex items-center space-x-3">
               <div className="flex items-center space-x-2">
