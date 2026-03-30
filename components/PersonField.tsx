@@ -23,7 +23,7 @@ export default function PersonField({
   };
 
   return (
-    <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+    <div className="flex items-center space-x-3 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
       {/* Colored dot */}
       <div
         className="w-6 h-6 rounded-full flex-shrink-0"
@@ -42,7 +42,7 @@ export default function PersonField({
           value={person.name}
           onChange={handleNameChange}
           placeholder="Enter name"
-          className="w-full bg-transparent border-none focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          className="w-full bg-transparent border-none focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
         />
       </div>
       

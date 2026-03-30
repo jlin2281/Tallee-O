@@ -70,4 +70,5 @@ export interface CalculationResult {
   totalTaxCents: number;
   totalTipCents: number;
   grandTotalCents: number;
+  payerId?: string;
 }

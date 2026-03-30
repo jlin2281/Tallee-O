@@ -16,7 +16,22 @@ export function parseDollarsToCents(value: string): number {
   return Math.round(dollars * 100);
 }
 
-// Helper for largest remainder rounding
+// Helper for round-robin remainder distribution
+function distributeRemainderRoundRobin(values: number[], total: number): number[] {
+  const base = Math.floor(total / values.length);
+  const remainder = total % values.length;
+  
+  const rounded = values.map(() => base);
+  
+  // Distribute remainder cents round-robin
+  for (let i = 0; i < remainder; i++) {
+    rounded[i]++;
+  }
+  
+  return rounded;
+}
+
+// Helper for largest remainder rounding (kept for backward compatibility)
 function largestRemainderRounding(values: number[], total: number): number[] {
   const rounded = values.map(Math.floor);
   let remainder = total - rounded.reduce((sum, val) => sum + val, 0);
@@ -69,7 +84,7 @@ function calculateItemShares(
   switch (firstMode) {
     case 'equal': {
       const share = Math.floor(priceCents / allocations.length);
-      let remainder = priceCents - (share * allocations.length);
+      const remainder = priceCents % allocations.length;
       
       for (let i = 0; i < allocations.length; i++) {
         const shareCents = share + (i < remainder ? 1 : 0);
@@ -126,7 +141,36 @@ function calculateItemShares(
   return shares;
 }
 
-export function calculateSplit(session: SplitSession): CalculationResult {
+// Generate settlements based on payer
+function generatePayerSettlements(
+  personResults: PersonResult[],
+  payerId: string
+): SettlementTransaction[] {
+  const payer = personResults.find(p => p.personId === payerId);
+  if (!payer) return [];
+  
+  const settlements: SettlementTransaction[] = [];
+  
+  for (const person of personResults) {
+    if (person.personId === payerId) continue; // Skip payer
+    
+    if (person.totalCents > 0) {
+      settlements.push({
+        fromPersonId: person.personId,
+        fromName: person.name,
+        fromColor: person.color,
+        toPersonId: payerId,
+        toName: payer.name,
+        toColor: payer.color,
+        amountCents: person.totalCents,
+      });
+    }
+  }
+  
+  return settlements;
+}
+
+export function calculateSplit(session: SplitSession, payerId?: string): CalculationResult {
   const { people, items, taxRatePercent, tipMode, tipValue, tipSplitMode, taxSplitMode } = session;
   
   // Step 1: Calculate item shares and build person subtotals
@@ -199,9 +243,9 @@ export function calculateSplit(session: SplitSession): CalculationResult {
   const personTaxes = new Map<string, number>();
   
   if (taxSplitMode === 'equal') {
-    // Divide tax equally among all people
+    // Divide tax equally among all people with round-robin remainder
     const taxPerPerson = Math.floor(totalTaxCents / people.length);
-    let remainder = totalTaxCents - (taxPerPerson * people.length);
+    const remainder = totalTaxCents % people.length;
     
     for (let i = 0; i < people.length; i++) {
       const taxCents = taxPerPerson + (i < remainder ? 1 : 0);
@@ -211,7 +255,7 @@ export function calculateSplit(session: SplitSession): CalculationResult {
     // Proportional tax based on tax base
     const taxBases = people.map(person => personTaxBases.get(person.id) || 0);
     const exactTaxes = taxBases.map(base => (totalTaxCents * base) / totalTaxBase);
-    const roundedTaxes = largestRemainderRounding(exactTaxes, totalTaxCents);
+    const roundedTaxes = distributeRemainderRoundRobin(exactTaxes, totalTaxCents);
     
     for (let i = 0; i < people.length; i++) {
       personTaxes.set(people[i].id, roundedTaxes[i]);
@@ -232,9 +276,9 @@ export function calculateSplit(session: SplitSession): CalculationResult {
   const personTips = new Map<string, number>();
   
   if (tipSplitMode === 'equal') {
-    // Divide tip equally among all people
+    // Divide tip equally among all people with round-robin remainder
     const tipPerPerson = Math.floor(totalTipCents / people.length);
-    let remainder = totalTipCents - (tipPerPerson * people.length);
+    const remainder = totalTipCents % people.length;
     
     for (let i = 0; i < people.length; i++) {
       const tipCents = tipPerPerson + (i < remainder ? 1 : 0);
@@ -244,7 +288,7 @@ export function calculateSplit(session: SplitSession): CalculationResult {
     // Proportional tip based on subtotal
     const subtotals = people.map(person => personSubtotals.get(person.id) || 0);
     const exactTips = subtotals.map(subtotal => (totalTipCents * subtotal) / totalSubtotalCents);
-    const roundedTips = largestRemainderRounding(exactTips, totalTipCents);
+    const roundedTips = distributeRemainderRoundRobin(exactTips, totalTipCents);
     
     for (let i = 0; i < people.length; i++) {
       personTips.set(people[i].id, roundedTips[i]);
@@ -274,7 +318,12 @@ export function calculateSplit(session: SplitSession): CalculationResult {
   const grandTotalCents = totalSubtotalCents + totalTaxCents + totalTipCents;
   
   // Step 8: Generate settlements
-  const settlements = minimizeDebts(personResults);
+  let settlements: SettlementTransaction[] = [];
+  if (payerId) {
+    settlements = generatePayerSettlements(personResults, payerId);
+  } else {
+    settlements = minimizeDebts(personResults);
+  }
   
   return {
     personResults,
@@ -284,5 +333,6 @@ export function calculateSplit(session: SplitSession): CalculationResult {
     totalTaxCents,
     totalTipCents,
     grandTotalCents,
+    payerId,
   };
 }
