@@ -61,18 +61,22 @@ export default function PayerSelectionModal({
     setIsSpinning(true);
     setWinnerIndex(null);
     
-    // Generate random winner using mulberry32 PRNG
-    const seed = Date.now() + spinCount;
-    const rand = mulberry32(seed)();
-    const newWinnerIndex = Math.floor(rand * people.length);
+    // Generate truly random winner for each spin
+    const newWinnerIndex = Math.floor(Math.random() * people.length);
     
-    // Calculate rotation: multiple full rotations + offset to land on winner
-    const fullRotations = 5; // Number of full 360° rotations
-    const segmentAngle = 360 / people.length;
-    const targetRotation = fullRotations * 360 + (360 - newWinnerIndex * segmentAngle) - (0.5 * segmentAngle);
+    // Always spin at least 5 full rotations plus a random extra amount
+    const extraSpins = 5 + Math.random() * 2; // 5-7 full rotations
+    const degreesPerSegment = 360 / people.length;
+    
+    // Calculate target angle to land on the winner segment
+    // We want the pointer to point at the center of the winner segment
+    const targetAngle = 360 - (newWinnerIndex * degreesPerSegment + degreesPerSegment / 2);
+    
+    // Accumulate rotation (don't reset to 0 between spins)
+    const newRotation = rotation + (extraSpins * 360) + targetAngle;
     
     // Animate the wheel
-    setRotation(targetRotation);
+    setRotation(newRotation);
     
     // Set winner after animation completes
     setTimeout(() => {
@@ -168,46 +172,51 @@ export default function PayerSelectionModal({
             {showWheel ? (
               /* Wheel View */
               <div className="flex flex-col items-center justify-center space-y-6">
-                {/* Wheel Container */}
-                <div className="relative">
-                  {/* Wheel */}
-                  <div
-                    ref={wheelRef}
-                    className="relative w-64 h-64 rounded-full overflow-hidden border-8 border-gray-300 dark:border-gray-600"
-                    style={{
-                      background: generateWheelGradient(),
-                      transform: `rotate(${rotation}deg)`,
-                      transition: isSpinning ? 'transform 3s cubic-bezier(0.2, 0.8, 0.3, 1)' : 'none',
-                    }}
-                  >
-                    {/* Segment labels */}
-                    {people.map((person, index) => {
-                      const segmentAngle = 360 / people.length;
-                      const midAngle = (index * segmentAngle) + (segmentAngle / 2);
-                      const rad = (midAngle * Math.PI) / 180;
-                      const labelX = 50 + 35 * Math.cos(rad);
-                      const labelY = 50 + 35 * Math.sin(rad);
-                      
-                      return (
-                        <div
-                          key={person.id}
-                          className="absolute text-white font-medium text-sm"
-                          style={{
-                            left: `${labelX}%`,
-                            top: `${labelY}%`,
-                            transform: 'translate(-50%, -50%)',
-                            textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
-                          }}
-                        >
-                          {person.name}
-                        </div>
-                      );
-                    })}
+                {/* Wheel and Legend Row */}
+                <div className="flex flex-col md:flex-row items-center justify-center space-y-6 md:space-y-0 md:space-x-8">
+                  {/* Wheel Container */}
+                  <div className="relative">
+                    {/* Wheel - colors only, no text */}
+                    <div
+                      ref={wheelRef}
+                      className="w-48 h-48 rounded-full border-8 border-gray-300 dark:border-gray-600"
+                      style={{
+                        background: generateWheelGradient(),
+                        transform: `rotate(${rotation}deg)`,
+                        transition: isSpinning ? 'transform 3s cubic-bezier(0.2, 0.8, 0.3, 1)' : 'none',
+                      }}
+                    />
+                    
+                  {/* Pointer - pointing DOWN at the wheel */}
+                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
+                    <div className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-red-500"></div>
+                  </div>
                   </div>
                   
-                  {/* Pointer */}
-                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
-                    <div className="w-0 h-0 border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-red-500"></div>
+                  {/* Legend */}
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 min-w-48">
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Legend
+                    </div>
+                    <div className="space-y-2">
+                      {people.map((person, index) => (
+                        <div
+                          key={person.id}
+                          className={`flex items-center space-x-2 ${
+                            winnerIndex === index ? 'font-bold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          <div
+                            className="w-4 h-4 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: person.color }}
+                          />
+                          <span className="truncate">
+                            {person.name || `Person ${index + 1}`}
+                            {winnerIndex === index && ' ✓'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

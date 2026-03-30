@@ -9,7 +9,7 @@ interface MobileDrawerProps {
 }
 
 export default function MobileDrawer({ isOpen, onClose, children }: MobileDrawerProps) {
-  // Close drawer on escape key
+  // Handle scroll lock and escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -18,11 +18,13 @@ export default function MobileDrawer({ isOpen, onClose, children }: MobileDrawer
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
     
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     };
   }, [isOpen, onClose]);
 
@@ -30,14 +32,14 @@ export default function MobileDrawer({ isOpen, onClose, children }: MobileDrawer
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop - visible on all screen sizes */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+        className="fixed inset-0 bg-black bg-opacity-50 z-40"
         onClick={onClose}
       />
       
-      {/* Drawer */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-900 shadow-xl z-50 md:hidden transform transition-transform duration-300 ease-in-out">
+      {/* Drawer - visible on all screen sizes */}
+      <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-900 shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">

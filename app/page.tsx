@@ -37,6 +37,7 @@ export default function HomePage() {
   useEffect(() => {
     const savedSession = loadSession();
     if (savedSession) {
+      // Restore all session values from localStorage
       setSession(savedSession);
     } else {
       // Initialize with one empty person only on client side
@@ -52,10 +53,21 @@ export default function HomePage() {
     }
   }, []);
 
-  // Save session to localStorage whenever it changes
+  // Auto-save session to localStorage whenever it changes
   useEffect(() => {
-    saveSession(session);
-  }, [session]);
+    // Only save if there's actual data (people or items)
+    if (session.people.length > 0 || session.items.length > 0) {
+      saveSession(session);
+    }
+  }, [
+    session.people,
+    session.items,
+    session.taxRatePercent,
+    session.tipMode,
+    session.tipValue,
+    session.tipSplitMode,
+    session.taxSplitMode,
+  ]);
 
   // People management
   const addPerson = (name?: string) => {
