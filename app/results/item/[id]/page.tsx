@@ -99,7 +99,7 @@ export default function ItemDetailPage() {
               {itemResult.personShares.map(share => (
                 <div
                   key={share.personId}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-750 rounded-lg"
+                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#374151] rounded-lg"
                 >
                   <div className="flex items-center space-x-3">
                     <div
