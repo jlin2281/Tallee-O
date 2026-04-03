@@ -18,6 +18,8 @@ export interface ReceiptItem {
   priceCents: number;
   taxed: boolean;
   allocations: ItemAllocation[];
+  discountType?: '%' | '$';
+  discountValue?: number; // percentage (0-100) or cents
 }
 
 export type TipMode = "percentage" | "fixed";

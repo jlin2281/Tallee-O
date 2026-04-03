@@ -16,6 +16,43 @@ export function parseDollarsToCents(value: string): number {
   return Math.round(dollars * 100);
 }
 
+// Helper to calculate item total with tax and discount
+export function calculateItemTotal(itemPriceCents: number, taxed: boolean, taxRatePercent: number, discountType?: '%' | '$', discountValue?: number): number {
+  // Calculate tax on original price
+  const taxAmount = taxed ? Math.round(itemPriceCents * taxRatePercent / 100) : 0;
+  
+  // Calculate discount amount
+  let discountAmount = 0;
+  if (discountType && discountValue !== undefined) {
+    if (discountType === '%') {
+      discountAmount = Math.round(itemPriceCents * discountValue / 100);
+    } else { // '$'
+      discountAmount = Math.min(discountValue, itemPriceCents + taxAmount); // Don't let discount exceed price + tax
+    }
+  }
+  
+  // Final total = base price + tax - discount
+  const total = itemPriceCents + taxAmount - discountAmount;
+  return Math.max(0, total); // Ensure total doesn't go below 0
+}
+
+// Helper to calculate item tax amount
+export function calculateItemTax(itemPriceCents: number, taxed: boolean, taxRatePercent: number): number {
+  return taxed ? Math.round(itemPriceCents * taxRatePercent / 100) : 0;
+}
+
+// Helper to calculate item discount amount
+export function calculateItemDiscount(itemPriceCents: number, discountType?: '%' | '$', discountValue?: number, taxAmount?: number): number {
+  if (!discountType || discountValue === undefined) return 0;
+  
+  if (discountType === '%') {
+    return Math.round(itemPriceCents * discountValue / 100);
+  } else { // '$'
+    const maxDiscount = itemPriceCents + (taxAmount || 0);
+    return Math.min(discountValue, maxDiscount);
+  }
+}
+
 // Helper for round-robin remainder distribution with offset
 function distributeWithRoundRobin(
   totalCents: number,
@@ -220,9 +257,9 @@ function generatePayerSettlements(
 export function calculateSplit(session: SplitSession, payerId?: string): CalculationResult {
   const { people, items, taxRatePercent, tipMode, tipValue, tipSplitMode, taxSplitMode } = session;
   
-  // Step 1: Calculate item shares and build person subtotals
+  // Step 1: Calculate item totals with tax and discount, then split among people
   const personSubtotals = new Map<string, number>();
-  const personTaxBases = new Map<string, number>(); // Only taxed items
+  const personTaxBases = new Map<string, number>(); // Tax base is original item price (not discounted)
   const itemResults: ItemResult[] = [];
   const personItemBreakdown = new Map<string, { itemId: string; name: string; shareCents: number }[]>();
   
@@ -237,7 +274,24 @@ export function calculateSplit(session: SplitSession, payerId?: string): Calcula
   let roundRobinOffset = 0;
   
   for (const item of items) {
-    const sharesWithOffset = calculateItemShares(item.priceCents, item.allocations, roundRobinOffset);
+    // Calculate tax on original price
+    const itemTaxAmount = item.taxed ? Math.round(item.priceCents * taxRatePercent / 100) : 0;
+    
+    // Calculate discount amount
+    let itemDiscountAmount = 0;
+    if (item.discountType && item.discountValue !== undefined) {
+      if (item.discountType === '%') {
+        itemDiscountAmount = Math.round(item.priceCents * item.discountValue / 100);
+      } else { // '$'
+        itemDiscountAmount = Math.min(item.discountValue, item.priceCents + itemTaxAmount);
+      }
+    }
+    
+    // Calculate total item cost after tax and discount
+    const itemTotalCents = Math.max(0, item.priceCents + itemTaxAmount - itemDiscountAmount);
+    
+    // Split the total item cost among assigned people
+    const sharesWithOffset = calculateItemShares(itemTotalCents, item.allocations, roundRobinOffset);
     
     // Update offset for next item directly from the calculated shares
     if (sharesWithOffset.length > 0) {
@@ -275,10 +329,13 @@ export function calculateSplit(session: SplitSession, payerId?: string): Calcula
       const currentSubtotal = personSubtotals.get(share.personId) || 0;
       personSubtotals.set(share.personId, currentSubtotal + share.shareCents);
       
-      // Add to tax base if item is taxed
+      // Add to tax base if item is taxed (using original price proportion)
       if (item.taxed) {
+        // Calculate the proportion of the item this person is paying
+        const proportion = itemTotalCents > 0 ? share.shareCents / itemTotalCents : 0;
+        const taxBaseContribution = Math.round(item.priceCents * proportion);
         const currentTaxBase = personTaxBases.get(share.personId) || 0;
-        personTaxBases.set(share.personId, currentTaxBase + share.shareCents);
+        personTaxBases.set(share.personId, currentTaxBase + taxBaseContribution);
       }
       
       // Add to item breakdown
@@ -292,7 +349,7 @@ export function calculateSplit(session: SplitSession, payerId?: string): Calcula
     }
   }
   
-  // Step 2: Calculate total tax
+  // Step 2: Calculate total tax (should match sum of item tax amounts)
   const totalTaxBase = Array.from(personTaxBases.values()).reduce((sum, base) => sum + base, 0);
   const totalTaxCents = Math.round(totalTaxBase * taxRatePercent / 100);
   

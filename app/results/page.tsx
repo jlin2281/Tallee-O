@@ -92,7 +92,6 @@ export default function ResultsPage() {
           </div>
         </div>
         
-        {/* Note: Settle-It Wheel has been moved to the PayerSelectionModal */}
       </main>
     </>
   );
