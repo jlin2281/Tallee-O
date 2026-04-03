@@ -165,6 +165,8 @@ export default function HomePage() {
       ...prev,
       items: prev.items.filter(i => i.id !== itemId),
     }));
+    setIsAddItemModalOpen(false);
+    setEditingItem(null);
   };
 
   const handleCancelItem = () => {
@@ -244,7 +246,11 @@ export default function HomePage() {
           <button
             onClick={() => {
               setIsDrawerOpen(false);
-              localStorage.clear();
+              // Clear sessionStorage for guest mode isolation
+              sessionStorage.clear();
+              // Also clear localStorage for theme (optional, but keeps things clean)
+              localStorage.removeItem('tallee-o-session');
+              localStorage.removeItem('tallee-o-result');
               setSession({
                 people: [{ id: uuidv4(), name: '', color: getNextColor([]) }],
                 items: [],

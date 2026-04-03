@@ -32,6 +32,9 @@ export default function AddItemModal({
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [percentages, setPercentages] = useState<Record<string, string>>({});
   const [newPersonName, setNewPersonName] = useState('');
+  const [hasDiscount, setHasDiscount] = useState(false);
+  const [discountType, setDiscountType] = useState<'%' | '$'>('%');
+  const [discountValue, setDiscountValue] = useState('');
 
   // Initialize form when item changes or modal opens
   useEffect(() => {
@@ -61,6 +64,17 @@ export default function AddItemModal({
         setExactAmounts(exact);
         setPercentages(perc);
       }
+      
+      // Initialize discount
+      if (item.discountType && item.discountValue !== undefined) {
+        setHasDiscount(true);
+        setDiscountType(item.discountType);
+        setDiscountValue(item.discountType === '%' ? item.discountValue.toString() : (item.discountValue / 100).toFixed(2));
+      } else {
+        setHasDiscount(false);
+        setDiscountType('%');
+        setDiscountValue('');
+      }
     } else {
       // Reset form for new item
       setName('');
@@ -71,6 +85,9 @@ export default function AddItemModal({
       setExactAmounts({});
       setPercentages({});
       setNewPersonName('');
+      setHasDiscount(false);
+      setDiscountType('%');
+      setDiscountValue('');
     }
   }, [item, isOpen]);
 
@@ -147,6 +164,21 @@ export default function AddItemModal({
       }
     }
     
+    // Validate discount
+    if (hasDiscount && discountValue.trim()) {
+      if (discountType === '%') {
+        const percent = parseFloat(discountValue);
+        if (isNaN(percent) || percent < 0 || percent > 100) {
+          return 'Percentage discount must be between 0 and 100.';
+        }
+      } else { // '$'
+        const dollarDiscount = parseDollarsToCents(discountValue);
+        if (dollarDiscount < 0 || dollarDiscount > priceCents) {
+          return 'Dollar discount must be between 0 and the item price.';
+        }
+      }
+    }
+    
     return null;
   };
 
@@ -191,6 +223,17 @@ export default function AddItemModal({
       taxed,
       allocations,
     };
+    
+    // Add discount if applicable
+    if (hasDiscount && discountValue.trim()) {
+      if (discountType === '%') {
+        newItem.discountType = '%';
+        newItem.discountValue = parseFloat(discountValue);
+      } else { // '$'
+        newItem.discountType = '$';
+        newItem.discountValue = parseDollarsToCents(discountValue);
+      }
+    }
     
     onSave(newItem);
   };
@@ -303,11 +346,103 @@ export default function AddItemModal({
               </div>
             </div>
 
+            {/* Discount Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Discount
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasDiscount}
+                    onChange={e => setHasDiscount(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Add discount
+                  </span>
+                </label>
+              </div>
+              
+              {hasDiscount && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Discount type
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setDiscountType('%')}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          discountType === '%'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        Percentage (%)
+                      </button>
+                      <button
+                        onClick={() => setDiscountType('$')}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          discountType === '$'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        Dollar ($)
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Discount value
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={discountValue}
+                        onChange={e => setDiscountValue(e.target.value)}
+                        className="w-full pl-8 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={discountType === '%' ? "0" : "0.00"}
+                      />
+                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                        {discountType === '%' ? '%' : '$'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Assign to People */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Assign to
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Assign to
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedPeople.size === people.length && people.length > 0}
+                    onChange={() => {
+                      if (selectedPeople.size === people.length) {
+                        // Clear all selections
+                        setSelectedPeople(new Set());
+                      } else {
+                        // Select all people
+                        const allPersonIds = new Set(people.map(p => p.id));
+                        setSelectedPeople(allPersonIds);
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Assign all people
+                  </span>
+                </label>
+              </div>
               <div className="border border-gray-300 dark:border-gray-600 rounded-lg divide-y divide-gray-300 dark:divide-gray-600">
                 {people.map(person => (
                   <div key={person.id} className="flex items-center p-3">
